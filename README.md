@@ -1,35 +1,47 @@
-Markdown
-# flutter-quote-generator 📱
+# Flutter Quote Generator
 
-A simple single-screen Flutter application that shows a random quote whenever you press a button.
+![Flutter](https://img.shields.io/badge/Flutter-Dart-02569B)
+![Material 3](https://img.shields.io/badge/design-Material%203-6750A4)
 
-Built as a clean, minimal Flutter exercise to demonstrate basic UI state management using `StatefulWidget`.
+A single-screen Flutter app that shows a random quote each time you press
+a button. Built as a clean exercise in Flutter's state management using
+`StatefulWidget`.
 
----
+## Why I built this
 
-## Setup & Run
+I wanted a minimal project to practice how Flutter rebuilds the UI in
+response to state changes, without any extra complexity from networking,
+storage, or navigation getting in the way.
 
-Make sure you have the **Flutter SDK** installed.
+## Setup and run
 
-1. Fetch dependencies:
-   ```bash
-   flutter pub get
-Run the application:
+Requires the Flutter SDK installed.
 
-Bash
+```bash
+flutter pub get
 flutter run
-Tip: You can also run it in Chrome without an emulator using:
+```
 
-Bash
+To run in a browser without an emulator:
+
+```bash
 flutter run -d chrome
-How It's Structured
-The entire logic is self-contained and clean, located in lib/main.dart:
+```
 
-QuoteApp: The root StatelessWidget that sets up the Material 3 theme and points to the home screen.
+## How it's structured
 
-QuoteScreen: The main StatefulWidget. It uses setState() inside the _showRandomQuote() function to trigger a UI redraw whenever a new quote is selected from the array.
+All logic lives in `lib/main.dart`:
 
-Tech Stack
-Flutter & Dart
+- `QuoteApp` - the root `StatelessWidget`. Sets up the Material 3 theme and points to the home screen.
+- `QuoteScreen` - the main `StatefulWidget`. Calls `setState()` inside `_showRandomQuote()` to trigger a UI redraw whenever a new quote is picked from the list.
 
-Material 3 Design
+## Possible extensions
+
+- Pull quotes from a public API instead of a static list
+- Add a fade or slide animation when the quote changes
+- Add a "favorite" button that saves quotes locally
+- Add a dark mode toggle
+
+## Tech stack
+
+Flutter, Dart, Material 3
