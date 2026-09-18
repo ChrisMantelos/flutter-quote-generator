@@ -7,6 +7,16 @@ A quote generator that fetches real quotes from a public API, with
 category filtering, favorites you can save and revisit, and a graceful
 offline fallback when the network is unavailable.
 
+## Screenshots
+
+**Home screen - category filters, quote card, actions**
+
+![Home screen](docs/home-screen.png)
+
+**Favorites screen - saved quotes, persisted across sessions**
+
+![Favorites screen](docs/favorites-screen.png)
+
 ## Why I rebuilt this
 
 The original version was a single screen with a static, hardcoded list
@@ -56,14 +66,15 @@ always shows something instead of an error screen.
 
 ## Testing status
 
-`flutter analyze` reports no issues. The structure of every file was
-also checked independently (balanced brackets, no truncated strings).
-The live API call and the favorites persistence have not been run
-against the real Flutter SDK in this environment - run `flutter run`
-yourself as the real test, and check that tapping the heart icon on a
-quote still shows it in Favorites after fully closing and reopening the
-app (that's the actual proof persistence works, not just that the icon
-changes color).
+`flutter analyze` reports no errors (only style suggestions). The app
+was run in Chrome and confirmed working end to end: category filtering,
+quote fetching, the fade transition, copying to clipboard, and favorites
+- adding, viewing on the Favorites screen, and removing. Favorites
+persistence was verified by closing the browser tab completely and
+reopening the app: previously saved favorites were still there. The
+offline fallback was also exercised in practice (visible in the first
+screenshot above, where a request to the live API did not go through and
+the app correctly displayed a local quote instead of crashing).
 
 ## Possible extensions
 
