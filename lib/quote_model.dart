@@ -3,13 +3,15 @@ class Quote {
   final String author;
   final List<String> tags;
 
-  Quote({required this.content, required this.author, this.tags = const []});
+  const Quote({required this.content, required this.author, this.tags = const []});
 
   factory Quote.fromJson(Map<String, dynamic> json) {
     return Quote(
       content: json['content'] as String,
       author: json['author'] as String,
-      tags: json['tags'] != null ? List<String>.from(json['tags']) : const [],
+      tags: json['tags'] != null
+          ? List<String>.from(json['tags'] as List)
+          : const [],
     );
   }
 
