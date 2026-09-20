@@ -29,6 +29,10 @@ while keeping the same core idea.
 - **Live quotes** from the [Quotable API](https://api.quotable.io), filterable by category (wisdom, inspirational, life, success, happiness)
 - **Offline fallback**: if the network request fails, the app falls back to a small built-in quote collection instead of crashing or showing a blank screen - and says so clearly, rather than pretending the fallback quote came from the API
 - **Favorites**: save quotes with a tap, view them on a separate screen, remove them individually - persisted with `shared_preferences` so they survive closing the app
+- **Search favorites** by author or keyword
+- **Quote of the day**: the first quote shown each day is cached and stays the same on every app open that day, even after restarting; tapping "New quote" browses freely without changing that day's cached quote
+- **Dark mode**, toggled from the top bar, persisted so it's remembered next time the app opens
+- **Share** a quote to any other app installed on the device (falls back to copying to clipboard if sharing isn't available on the platform)
 - **Copy to clipboard** for sharing a quote elsewhere
 - **Smooth fade transition** when a new quote loads, instead of an instant swap
 
@@ -51,12 +55,14 @@ flutter run -d chrome
 
 ```
 lib/
-    main.dart              home screen: tag filter, quote card, actions
+    main.dart              app entry point, dark mode state, home screen
     quote_model.dart        Quote data class
     quote_service.dart      API call to Quotable, with local fallback data
-    favorites_storage.dart  persistence layer using shared_preferences
-    favorites_screen.dart   list of saved favorites
-    theme.dart              colors and typography used throughout
+    favorites_storage.dart  favorites persistence using shared_preferences
+    daily_quote_storage.dart  caches the day's first quote by date
+    theme_storage.dart      persists the dark mode preference
+    favorites_screen.dart   list of saved favorites, with search
+    theme.dart              color palette (light/dark) and typography
 ```
 
 `QuoteService.fetchRandomQuote()` tries the live API first; if it fails
@@ -66,15 +72,28 @@ always shows something instead of an error screen.
 
 ## Testing status
 
-`flutter analyze` reports no errors (only style suggestions). The app
-was run in Chrome and confirmed working end to end: category filtering,
-quote fetching, the fade transition, copying to clipboard, and favorites
-- adding, viewing on the Favorites screen, and removing. Favorites
-persistence was verified by closing the browser tab completely and
-reopening the app: previously saved favorites were still there. The
-offline fallback was also exercised in practice (visible in the first
-screenshot above, where a request to the live API did not go through and
-the app correctly displayed a local quote instead of crashing).
+The previous version of this app (live quotes, categories, favorites,
+offline fallback) was fully run and confirmed working - see the
+screenshots above.
+
+Dark mode, quote-of-the-day caching, favorites search, and the share
+button are new in this version and have **not** been run against the
+real Flutter SDK yet. The code compiles logically and the structure of
+every file was checked (balanced brackets, no leftover references to the
+old color system), but this is not the same as confirming it actually
+runs. Before relying on this version, run `flutter pub get` (to fetch
+the new `share_plus` package), then `flutter analyze`, then `flutter
+run`, and check specifically:
+
+- Toggling dark mode changes the whole app's colors, and stays dark
+  after fully closing and reopening the app
+- Typing in the Favorites search box actually filters the list
+- The share button opens a real share option (or falls back to copying,
+  without crashing, if sharing isn't supported in that environment)
+- The quote shown on first open today is still the same one on a second
+  open the same day (this one is hard to fully verify quickly since it
+  depends on the calendar date, but at minimum confirm it doesn't crash
+  and shows some quote)
 
 ## Possible extensions
 
