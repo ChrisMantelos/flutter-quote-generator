@@ -1,45 +1,79 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 import 'theme.dart';
+import 'theme_storage.dart';
 import 'quote_model.dart';
 import 'quote_service.dart';
 import 'favorites_storage.dart';
+import 'daily_quote_storage.dart';
 import 'favorites_screen.dart';
 
 void main() {
   runApp(const QuoteApp());
 }
 
-class QuoteApp extends StatelessWidget {
+class QuoteApp extends StatefulWidget {
   const QuoteApp({super.key});
 
   @override
+  State<QuoteApp> createState() => _QuoteAppState();
+}
+
+class _QuoteAppState extends State<QuoteApp> {
+  final ThemeStorage _themeStorage = ThemeStorage();
+  bool _isDarkMode = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTheme();
+  }
+
+  Future<void> _loadTheme() async {
+    final isDark = await _themeStorage.loadIsDarkMode();
+    if (mounted) setState(() => _isDarkMode = isDark);
+  }
+
+  Future<void> _toggleDarkMode() async {
+    setState(() => _isDarkMode = !_isDarkMode);
+    await _themeStorage.saveIsDarkMode(_isDarkMode);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final palette = _isDarkMode ? QuotePalette.dark : QuotePalette.light;
+    final brightness = _isDarkMode ? Brightness.dark : Brightness.light;
+
     return MaterialApp(
       title: 'Quote Generator',
-      theme: ThemeData(
-        scaffoldBackgroundColor: QuoteColors.paper,
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: QuoteColors.accent,
-          surface: QuoteColors.paper,
-        ),
+      theme: buildAppTheme(palette, brightness),
+      home: QuoteScreen(
+        isDarkMode: _isDarkMode,
+        onToggleDarkMode: _toggleDarkMode,
       ),
-      home: const QuoteScreen(),
     );
   }
 }
 
 class QuoteScreen extends StatefulWidget {
-  const QuoteScreen({super.key});
+  final bool isDarkMode;
+  final VoidCallback onToggleDarkMode;
+
+  const QuoteScreen({
+    super.key,
+    required this.isDarkMode,
+    required this.onToggleDarkMode,
+  });
 
   @override
   State<QuoteScreen> createState() => _QuoteScreenState();
 }
 
 class _QuoteScreenState extends State<QuoteScreen> with SingleTickerProviderStateMixin {
-  final _service = QuoteService();
-  final _favoritesStorage = FavoritesStorage();
+  final QuoteService _service = QuoteService();
+  final FavoritesStorage _favoritesStorage = FavoritesStorage();
+  final DailyQuoteStorage _dailyStorage = DailyQuoteStorage();
 
   Quote? _quote;
   bool _fromFallback = false;
@@ -59,7 +93,7 @@ class _QuoteScreenState extends State<QuoteScreen> with SingleTickerProviderStat
     );
     _fade = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
     _loadFavorites();
-    _loadQuote();
+    _loadInitialQuote();
   }
 
   @override
@@ -73,7 +107,21 @@ class _QuoteScreenState extends State<QuoteScreen> with SingleTickerProviderStat
     if (mounted) setState(() => _favorites = favorites);
   }
 
-  Future<void> _loadQuote() async {
+  Future<void> _loadInitialQuote() async {
+    final cached = await _dailyStorage.loadTodayQuote();
+    if (cached != null) {
+      setState(() {
+        _quote = cached;
+        _fromFallback = false;
+        _loading = false;
+      });
+      _controller.forward(from: 0);
+      return;
+    }
+    await _fetchQuote(saveAsDaily: true);
+  }
+
+  Future<void> _fetchQuote({bool saveAsDaily = false}) async {
     setState(() => _loading = true);
     final result = await _service.fetchRandomQuote(tag: _selectedTag);
     if (!mounted) return;
@@ -83,10 +131,12 @@ class _QuoteScreenState extends State<QuoteScreen> with SingleTickerProviderStat
       _loading = false;
     });
     _controller.forward(from: 0);
+    if (saveAsDaily) {
+      await _dailyStorage.saveTodayQuote(result.quote);
+    }
   }
 
-  bool get _isFavorite =>
-      _quote != null && _favorites.contains(_quote);
+  bool get _isFavorite => _quote != null && _favorites.contains(_quote);
 
   Future<void> _toggleFavorite() async {
     if (_quote == null) return;
@@ -108,15 +158,27 @@ class _QuoteScreenState extends State<QuoteScreen> with SingleTickerProviderStat
     );
   }
 
+  Future<void> _shareQuote() async {
+    if (_quote == null) return;
+    final text = '"${_quote!.content}" - ${_quote!.author}';
+    try {
+      await Share.share(text);
+    } catch (_) {
+      _copyToClipboard();
+    }
+  }
+
   Future<void> _openFavorites() async {
     await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => FavoritesScreen(storage: _favoritesStorage)),
+      MaterialPageRoute<void>(builder: (_) => const FavoritesScreen()),
     );
     _loadFavorites();
   }
 
   @override
   Widget build(BuildContext context) {
+    final palette = Theme.of(context).extension<QuotePalette>()!;
+
     return Scaffold(
       body: SafeArea(
         child: Center(
@@ -130,10 +192,23 @@ class _QuoteScreenState extends State<QuoteScreen> with SingleTickerProviderStat
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('Quote Generator', style: QuoteText.title),
-                      IconButton(
-                        onPressed: _openFavorites,
-                        icon: Icon(Icons.bookmark, color: QuoteColors.accent),
+                      Text('Quote Generator', style: QuoteTextStyles.title(palette.ink)),
+                      Row(
+                        children: [
+                          IconButton(
+                            onPressed: widget.onToggleDarkMode,
+                            icon: Icon(
+                              widget.isDarkMode
+                                  ? Icons.light_mode_outlined
+                                  : Icons.dark_mode_outlined,
+                              color: palette.accent,
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: _openFavorites,
+                            icon: Icon(Icons.bookmark, color: palette.accent),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -145,17 +220,19 @@ class _QuoteScreenState extends State<QuoteScreen> with SingleTickerProviderStat
                       _TagChip(
                         label: 'all',
                         selected: _selectedTag == null,
+                        palette: palette,
                         onTap: () {
                           setState(() => _selectedTag = null);
-                          _loadQuote();
+                          _fetchQuote();
                         },
                       ),
                       ...availableTags.map((tag) => _TagChip(
                             label: tag,
                             selected: _selectedTag == tag,
+                            palette: palette,
                             onTap: () {
                               setState(() => _selectedTag = tag);
-                              _loadQuote();
+                              _fetchQuote();
                             },
                           )),
                     ],
@@ -164,12 +241,13 @@ class _QuoteScreenState extends State<QuoteScreen> with SingleTickerProviderStat
                   Expanded(
                     child: Center(
                       child: _loading
-                          ? const CircularProgressIndicator(color: QuoteColors.accent)
+                          ? CircularProgressIndicator(color: palette.accent)
                           : FadeTransition(
                               opacity: _fade,
                               child: _QuoteCard(
                                 quote: _quote,
                                 fromFallback: _fromFallback,
+                                palette: palette,
                               ),
                             ),
                     ),
@@ -181,23 +259,27 @@ class _QuoteScreenState extends State<QuoteScreen> with SingleTickerProviderStat
                         onPressed: _quote == null ? null : _toggleFavorite,
                         icon: Icon(
                           _isFavorite ? Icons.favorite : Icons.favorite_border,
-                          color: QuoteColors.accent,
+                          color: palette.accent,
                         ),
                       ),
                       IconButton(
                         onPressed: _quote == null ? null : _copyToClipboard,
-                        icon: Icon(Icons.copy_outlined, color: QuoteColors.inkSoft),
+                        icon: Icon(Icons.copy_outlined, color: palette.inkSoft),
+                      ),
+                      IconButton(
+                        onPressed: _quote == null ? null : _shareQuote,
+                        icon: Icon(Icons.share_outlined, color: palette.inkSoft),
                       ),
                       const Spacer(),
                       FilledButton(
                         style: FilledButton.styleFrom(
-                          backgroundColor: QuoteColors.accent,
+                          backgroundColor: palette.accent,
                           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(4),
                           ),
                         ),
-                        onPressed: _loading ? null : _loadQuote,
+                        onPressed: _loading ? null : () => _fetchQuote(),
                         child: const Text('New quote'),
                       ),
                     ],
@@ -215,9 +297,15 @@ class _QuoteScreenState extends State<QuoteScreen> with SingleTickerProviderStat
 class _TagChip extends StatelessWidget {
   final String label;
   final bool selected;
+  final QuotePalette palette;
   final VoidCallback onTap;
 
-  const _TagChip({required this.label, required this.selected, required this.onTap});
+  const _TagChip({
+    required this.label,
+    required this.selected,
+    required this.palette,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -226,13 +314,13 @@ class _TagChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: selected ? QuoteColors.accentBg : Colors.transparent,
+          color: selected ? palette.accentBg : Colors.transparent,
           border: Border.all(
-            color: selected ? QuoteColors.accent : QuoteColors.chipBorder,
+            color: selected ? palette.accent : palette.chipBorder,
           ),
           borderRadius: BorderRadius.circular(20),
         ),
-        child: Text(label, style: QuoteText.chip),
+        child: Text(label, style: QuoteTextStyles.chip(palette.ink)),
       ),
     );
   }
@@ -241,24 +329,29 @@ class _TagChip extends StatelessWidget {
 class _QuoteCard extends StatelessWidget {
   final Quote? quote;
   final bool fromFallback;
+  final QuotePalette palette;
 
-  const _QuoteCard({required this.quote, required this.fromFallback});
+  const _QuoteCard({
+    required this.quote,
+    required this.fromFallback,
+    required this.palette,
+  });
 
   @override
   Widget build(BuildContext context) {
     if (quote == null) {
-      return Text('No quote yet.', style: QuoteText.author);
+      return Text('No quote yet.', style: QuoteTextStyles.author(palette.inkSoft));
     }
 
     return Container(
       padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: QuoteColors.chipBorder),
+        color: palette.cardBg,
+        border: Border.all(color: palette.chipBorder),
         borderRadius: BorderRadius.circular(2),
         boxShadow: [
           BoxShadow(
-            color: QuoteColors.ink.withValues(alpha: 0.06),
+            color: palette.ink.withValues(alpha: 0.06),
             blurRadius: 12,
             offset: const Offset(0, 6),
           ),
@@ -268,12 +361,15 @@ class _QuoteCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('"${quote!.content}"', style: QuoteText.quote(22)),
+          Text('"${quote!.content}"', style: QuoteTextStyles.quote(palette.ink, 22)),
           const SizedBox(height: 16),
-          Text('- ${quote!.author}', style: QuoteText.author),
+          Text('- ${quote!.author}', style: QuoteTextStyles.author(palette.accent)),
           if (fromFallback) ...[
             const SizedBox(height: 12),
-            Text('OFFLINE - SHOWN FROM LOCAL COLLECTION', style: QuoteText.label),
+            Text(
+              'OFFLINE - SHOWN FROM LOCAL COLLECTION',
+              style: QuoteTextStyles.label(palette.inkSoft),
+            ),
           ],
         ],
       ),
